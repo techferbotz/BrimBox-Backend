@@ -6,7 +6,8 @@ card mandate with a limit the user chooses, with Google Play credits alongside. 
 Multiplatform app, **Android first**, iOS later.
 
 **The design is in [`docs/BACKEND_PLAN.md`](docs/BACKEND_PLAN.md)** — architecture, data model, metering,
-billing, and the phased roadmap (§12). Read it before building a phase. **Current phase: P0 (foundations).**
+billing, and the phased roadmap (§12). Read it before building a phase. **P0 (foundations) is live at
+`https://brimbox.ferbotz.com` since 2026-10-01; next is P1 (accounts).** Deploy facts: `docs/DEPLOY.md`.
 
 ## House of Apps protocols
 

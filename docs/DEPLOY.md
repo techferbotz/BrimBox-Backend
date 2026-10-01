@@ -15,9 +15,9 @@ This page covers BrimBox's setup on the box and its project-specific steps.
 
 ## Status
 
-- **2026-10-01 — P0 deployed over HTTP** at `3cb36e1`. `/`, `/config` and the legal pages answer through
-  nginx on the box's IP.
-- **HTTPS is pending:** it needs the DNS record first (see "Remaining P0 steps").
+- **2026-10-01 — P0 live at `https://brimbox.ferbotz.com`** (commit `3cb36e1`): `/`, `/config` and the
+  legal pages. Plain HTTP redirects to HTTPS. The Let's Encrypt certificate expires 2026-12-30 and renews
+  automatically (`certbot.timer`; a renewal dry run passed).
 
 ## Who does what
 
@@ -29,10 +29,11 @@ access or touches an account. Claude prepares the exact steps for each.
 | Create the private GitHub repo and push | human creates, Claude pushes | done |
 | Resize the box to t3.small (stop/start) | human (the auto-mode classifier blocks agents from stopping instances) | done 2026-10-01 |
 | Clone on the box, write `.env`, build and start, nginx site | Claude, over SSH | done 2026-10-01 |
-| DNS A record `brimbox` → `13.205.128.80`, DNS only (Cloudflare dashboard) | human | pending |
-| certbot for `brimbox.ferbotz.com` | Claude, over SSH, after DNS | pending |
+| DNS A record `brimbox` → `13.205.128.80`, DNS only (Cloudflare dashboard) | human | done 2026-10-01 |
+| certbot for `brimbox.ferbotz.com` | Claude, over SSH | done 2026-10-01 |
+| Details doc (protocol 00): `G:\My Drive\BrimBox\BrimBox details.md` | Claude | done 2026-10-01 (no secrets yet) |
 | R2 bucket + scoped API token (Cloudflare dashboard) — needed by P3 | human | pending |
-| Details doc + credentials registry entries (protocol 00) | Claude records the secrets it generates (none yet) | from P1 |
+| Credentials in the details doc + HOA registry | whoever creates each secret | from P1 |
 
 ## The box
 
@@ -99,15 +100,16 @@ sudo nginx -t && sudo systemctl reload nginx   # never reload on a failed test: 
 Requests sent in the first moments after a reload can still reach the old workers and get nginx's 404.
 Re-test after a second before concluding anything is wrong.
 
-## Remaining P0 steps (once the DNS record exists)
+## TLS (done 2026-10-01)
+
+The name must resolve to the box before certbot can prove ownership. certbot uses the box's existing
+Let's Encrypt account, rewrites `sites-available/brimbox` with the 443 block and the HTTP→HTTPS
+redirect, and tests nginx before reloading it.
 
 ```bash
-# from anywhere: the name must resolve to the box before certbot can prove ownership
-nslookup brimbox.ferbotz.com                     # expect 13.205.128.80
-
-# on the box
-sudo certbot --nginx -d brimbox.ferbotz.com      # adds 443 + the HTTP→HTTPS redirect
-sudo nginx -t && sudo systemctl reload nginx
+nslookup brimbox.ferbotz.com 1.1.1.1                                       # expect 13.205.128.80
+sudo certbot --nginx -d brimbox.ferbotz.com --non-interactive --redirect   # on the box
+sudo certbot renew --dry-run --cert-name brimbox.ferbotz.com               # renewal check, changes nothing
 
 # verify
 curl -s https://brimbox.ferbotz.com/
@@ -115,10 +117,10 @@ curl -s https://brimbox.ferbotz.com/config
 curl -sI https://brimbox.ferbotz.com/privacy | head -1
 ```
 
-Then record the three legal URLs in the details doc (protocol 00/12). They are what goes into the Play
-Console.
+The three legal URLs are recorded in `BrimBox details.md` (protocols 00/12). They are what goes into the
+Play Console.
 
-Before DNS exists, test the public path by pinning the name to the IP:
+To test a server block before its DNS exists, pin the name to the IP:
 `curl --resolve brimbox.ferbotz.com:80:13.205.128.80 http://brimbox.ferbotz.com/`.
 
 ## Later phases add
