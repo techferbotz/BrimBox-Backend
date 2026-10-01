@@ -123,10 +123,61 @@ Play Console.
 To test a server block before its DNS exists, pin the name to the IP:
 `curl --resolve brimbox.ferbotz.com:80:13.205.128.80 http://brimbox.ferbotz.com/`.
 
+## P1 deploy: database and sign-in (runbook)
+
+Deploying doesn't need the Google OAuth client: until `GOOGLE_CLIENT_ID` is set, sign-in answers 503
+and everything else works. From P1 on, every deploy with a schema change follows protocol 05's order:
+migrate first, then rebuild the app.
+
+```bash
+cd /opt/apps/brimbox/BrimBox-Backend && git pull
+
+# 1. Can BrimBox's docker network reach the host Postgres? Compare its subnet with pg_hba.conf.
+docker network inspect brimbox_default -f '{{(index .IPAM.Config 0).Subnet}}'
+sudo grep -vE '^\s*(#|$)' /etc/postgresql/*/main/pg_hba.conf
+
+# 2. Role + database. The password is generated here, goes straight into .env, and is never printed.
+PW=$(openssl rand -hex 24)
+sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" <<'SQL'
+CREATE ROLE brimbox LOGIN PASSWORD :'pw';
+CREATE DATABASE brimbox OWNER brimbox;
+REVOKE CONNECT ON DATABASE brimbox FROM PUBLIC;
+SQL
+( umask 077; {
+  echo "DATABASE_URL=postgresql://brimbox:${PW}@host.docker.internal:5432/brimbox?schema=public"
+  echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+  echo "JWT_EXPIRES_IN=1h"
+} >> .env ); unset PW
+
+# 3. Migrate FIRST (always --build), then rebuild the app.
+docker compose -f docker-compose.prod.yml run --rm --build migrate
+docker compose -f docker-compose.prod.yml up -d --build app
+
+# 4. Verify
+curl -s https://brimbox.ferbotz.com/api/v1/me          # 401 UNAUTHORIZED
+curl -s -X POST -H 'Content-Type: application/json' -d '{"idToken":"x"}' \
+  https://brimbox.ferbotz.com/api/v1/auth/google        # 503 until GOOGLE_CLIENT_ID is set
+curl -s https://brimbox.ferbotz.com/config              # still 200
+```
+
+Record the two new secrets, the database password and `JWT_SECRET`, in `BrimBox details.md` and the HOA
+credentials registry. Copy them from the server `.env`; never paste them into chat.
+
+### Google OAuth client (human, for sign-in)
+
+Use a Google Cloud project of BrimBox's own, so the sign-in consent screen says "BrimBox":
+
+1. **OAuth consent screen:** app name **BrimBox**, a support email, and the privacy and terms URLs
+   (`https://brimbox.ferbotz.com/privacy`, `/terms`).
+2. **Credentials → Create OAuth client → Android:** the app's package name, plus the SHA-1 fingerprints
+   of its debug and release signing keys (the app side supplies these).
+3. **Credentials → Create OAuth client → Web application:** its client id is the **server client id**.
+   It isn't secret. Put it in the server `.env` as `GOOGLE_CLIENT_ID=…` and recreate the container
+   (`docker compose -f docker-compose.prod.yml up -d app`). Also publish it in the contract folder: the
+   app passes it to Credential Manager.
+
 ## Later phases add
 
-- **P1:** a `brimbox` database and role on the host Postgres, `DATABASE_URL` and `JWT_SECRET` in
-  `.env`, and the `migrate` service. Deploys then follow protocol 05's "with a schema change" order.
 - **P3:** R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`) and
   the `worker` service.
 - **P4/P5:** FCM, SES and Razorpay credentials.

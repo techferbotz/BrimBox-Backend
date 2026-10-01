@@ -52,6 +52,17 @@ export class ConflictError extends AppError {
   }
 }
 
+// 429 — the caller is over a rate limit. The error handler turns `retryAfterSeconds` into a
+// Retry-After header.
+export class TooManyRequestsError extends AppError {
+  public readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number, message = "Too many requests, please slow down") {
+    super(429, message, "RATE_LIMITED");
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 // 503 — a feature is not configured or temporarily unavailable (e.g. an optional integration
 // whose env vars are unset). Distinct from a 500 bug and a 400 client error.
 export class ServiceUnavailableError extends AppError {

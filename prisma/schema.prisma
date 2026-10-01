@@ -1,0 +1,72 @@
+// BrimBox schema. Prisma 6 is pinned on purpose (HOA protocol 04): v7 drops `url = env(...)` and
+// needs a driver adapter. Every Prisma call lives in a repository — no Prisma anywhere else.
+// Migrations are a discrete step (`migrate` compose service), never run on container start.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A BrimBox account. Users sign in with Google; the identity is Google's stable `sub`, never the
+/// email (which can change).
+model User {
+  id        String    @id @default(uuid()) @db.Uuid
+  /// Google's `sub`. Cleared when the account is deleted, so the same Google account can sign up
+  /// again as a NEW account while this row stays behind, anonymised, as the anchor for records that
+  /// must outlive the account (statements and payments, from P5).
+  googleSub String?   @unique
+  email     String?
+  name      String?
+  photoUrl  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Set by DELETE /api/v1/me. The personal fields above are cleared in the same transaction.
+  deletedAt DateTime?
+
+  sessions Session[]
+}
+
+/// One signed-in device (deviation D1 in docs/BACKEND_PLAN.md).
+///
+/// Access tokens are short-lived JWTs carrying this row's id (`sid`); every authenticated request
+/// checks that the session still exists, so revoking a device takes effect immediately.
+///
+/// The refresh token is the long-lived credential:
+///   - Only SHA-256 hashes are stored. The token is 256 bits of CSPRNG output, so a fast hash is
+///     right: there is nothing guessable to slow down, and lookup is a unique-index hit.
+///   - Every refresh ROTATES it. The replaced hash is kept in `previousTokenHash`, so a replay can be
+///     recognised: inside a short grace window it is a phone retrying a refresh whose response was
+///     lost (it gets new tokens); after it, the token was copied (theft) and the session is revoked.
+model Session {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  /// SHA-256 (hex) of the current refresh token. Never the raw value.
+  refreshTokenHash  String    @unique
+  /// SHA-256 (hex) of the refresh token this one replaced, for replay detection. Null until the
+  /// first rotation.
+  previousTokenHash String?   @unique
+  /// When `previousTokenHash` was replaced — the start of its retry grace window.
+  rotatedAt         DateTime?
+  /// The app's per-install id (X-Device-Id). Signing in again on the same install replaces the old
+  /// session, so reinstalls don't pile up devices.
+  deviceId          String?
+  /// Shown in the user's "signed-in devices" list. Client-supplied hints, never trusted for security.
+  deviceName        String?
+  platform          String?
+  appVersion        String?
+  /// The device's FCM registration token. It lives on the session, so a signed-out device stops
+  /// receiving notifications. Unique: a token moves to whichever session registered it last.
+  pushToken         String?   @unique
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime  @default(now())
+  /// Sliding idle expiry, pushed forward on every refresh.
+  expiresAt         DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deviceId])
+}

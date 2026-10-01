@@ -410,7 +410,9 @@ export function renderTermsOfService(): string {
  * and for how long. It must also work for someone who no longer has the app, hence the email route
  * next to the in-app one.
  *
- * The in-app route is DELETE /api/v1/me (P1 skeleton; files purged from P3). The retained list must
+ * The in-app route is DELETE /api/v1/me, which requires a fresh Google sign-in for the same account
+ * (hence the "confirm it's you" step). Since P1 it anonymises the account and signs out every device;
+ * files are purged from P3, the final bill and mandate cancellation from P5. The retained list must
  * match what genuinely survives that call — if deletion behaviour changes, change this page in the
  * same commit.
  */
@@ -444,7 +446,8 @@ export function renderDeleteAccount(): string {
         <li>Open <strong>Settings</strong>.</li>
         <li>Tap <strong>Account</strong>.</li>
         <li>Tap <strong>Delete account</strong>.</li>
-        <li>Read the confirmation message and tap <strong>Delete</strong> to confirm.</li>
+        <li>Read the confirmation message and tap <strong>Delete</strong>.</li>
+        <li>Confirm it&rsquo;s you by choosing your Google account when asked.</li>
       </ol>
     </div>
     <p>Your account is closed <strong>immediately</strong> and every device is signed out. Your files

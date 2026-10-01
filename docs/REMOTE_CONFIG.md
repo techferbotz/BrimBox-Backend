@@ -33,7 +33,8 @@ It is pure and synchronous: no database, so it answers even when Postgres is dow
 
 Planned additions follow protocol 10's "mirrored, never retyped" rule. Each value is imported from the
 module that enforces it:
-- `features.*` switches for sign-in (P1), uploads (P3) and sharing (P7).
+- `features.*` switches for uploads (P3) and sharing (P7). There's no sign-in switch: BrimBox can't be
+  used signed out, so `maintenance` is the lever there.
 - An `upload` section mirroring the server's limits: max file size, part size, concurrency.
 - A `billing` section with the limit-alert percentages.
 

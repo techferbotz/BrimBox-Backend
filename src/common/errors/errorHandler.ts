@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { AppError } from "./AppError";
+import { Prisma } from "@prisma/client";
+import { AppError, TooManyRequestsError } from "./AppError";
 import { ErrorResponse } from "../response/apiResponse";
 
 // express.json() errors carry a `type`; these are the two a client can cause.
@@ -30,6 +31,9 @@ export const errorHandler = (
   };
 
   if (err instanceof AppError) {
+    if (err instanceof TooManyRequestsError) {
+      res.set("Retry-After", String(err.retryAfterSeconds));
+    }
     fail(err.statusCode, err.code, err.message);
     return;
   }
@@ -42,6 +46,18 @@ export const errorHandler = (
   if (parserType === "entity.too.large") {
     fail(413, "PAYLOAD_TOO_LARGE", "Request body too large");
     return;
+  }
+
+  // Prisma errors a request can legitimately trigger, mapped to the codes the app understands.
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2025") {
+      fail(404, "NOT_FOUND", "Not found");
+      return;
+    }
+    if (err.code === "P2002") {
+      fail(409, "CONFLICT", "Already exists");
+      return;
+    }
   }
 
   // Anything else is unexpected: log it (never request bodies or headers) and return 500.

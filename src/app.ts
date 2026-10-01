@@ -2,13 +2,19 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config/env";
 import { requestLogger } from "./common/middleware/requestLogger";
+import { optionalDevice } from "./common/middleware/device.middleware";
 import { errorHandler } from "./common/errors/errorHandler";
 import { NotFoundError } from "./common/errors/AppError";
 import legalRoutes from "./modules/legal/legal.routes";
 import remoteConfigRoutes from "./modules/remoteConfig/remoteConfig.routes";
+import authRoutes from "./modules/auth/auth.routes";
+import accountRoutes from "./modules/account/account.routes";
 
 const app = express();
 app.disable("x-powered-by");
+// nginx on the box is the one proxy in front of us: trust exactly one hop, so req.ip is the
+// caller's address (rate limits key on it) rather than loopback.
+app.set("trust proxy", 1);
 
 // Global middleware
 app.use(requestLogger); // registered first so it times everything
@@ -16,6 +22,8 @@ app.use(cors());
 // Small JSON bodies only: file bytes never pass through this server — the app uploads straight
 // to object storage with presigned URLs (docs/BACKEND_PLAN.md, deviation D2).
 app.use(express.json({ limit: "1mb" }));
+// X-Device-Id, when present and well-formed. Never rejects (see the middleware).
+app.use(optionalDevice);
 
 // Health check — the text protocol 05's deploy verification curls for.
 app.get("/", (_req, res) => {
@@ -26,10 +34,12 @@ app.get("/", (_req, res) => {
 app.use(legalRoutes);
 
 // Remote config: the app's first call on launch (HOA protocol 10). Nothing about the caller is
-// required; its router attaches identity when present, for future targeting rules.
+// required, and it never reads the database.
 app.use("/config", remoteConfigRoutes);
 
-// App API routes live under /api/v1 and arrive with P1 (auth).
+// App API. Sign-in/refresh/logout are how a token is obtained; everything else requires one.
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/me", accountRoutes);
 
 // Unknown route -> standard 404 envelope, produced by the central error handler.
 app.use((req) => {

@@ -582,7 +582,7 @@ user's state, collected at mandate setup. The CGST/SGST vs IGST split is worked 
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/google {idToken, device}` → access + refresh · `POST /auth/refresh` (rotation; a reused token revokes that session) · `POST /auth/logout` |
-| Account | `GET/PATCH /me` · `GET /me/sessions` · `DELETE /me/sessions/:id` · `POST /me/sessions/revoke-others` · `PUT /me/push-token` · `DELETE /me` |
+| Account | `GET /me` · `GET /me/sessions` · `DELETE /me/sessions/:id` · `POST /me/sessions/revoke-others` · `PUT /me/push-token` · `DELETE /me {idToken}` (needs a fresh Google sign-in). `PATCH /me` waits until there is an editable field (the GST state, P5). |
 | Tree | `GET /folders/:id/children` (`root` or a UUID; cursor, limit, sort) · `POST /folders {id,parentId,name}` · `GET /nodes/:id` · `PATCH /nodes/:id {name?,parentId?,updatedAt}` · `POST /nodes/:id/trash` · `POST /nodes/:id/restore` · `DELETE /nodes/:id` (purge) · `GET /trash` · `DELETE /trash` · `GET /search?q=` |
 | Sync | `GET /sync/changes?cursor&limit` |
 | Uploads | `POST /uploads` · `POST /uploads/:id/parts` · `GET /uploads/:id` · `POST /uploads/:id/complete` · `DELETE /uploads/:id` |
@@ -680,7 +680,7 @@ or failed run is visible and alertable. The nightly DB backup runs from the host
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | **P0 Foundations** | Protocol 00 setup: Drive folder, contract folder, docs mirror; the details doc and credentials registry entries are written at first deploy, when there are secrets to record. Scaffold per protocol 04, `/config`, legal pages, health, Docker/compose, `CLAUDE.md`. DNS, vhost, TLS. The R2 bucket is created by you, ready for P3. | `https://brimbox.ferbotz.com` serves health, `/config` and the legal pages. Contract folder bootstrapped. |
-| **P1 Accounts** | Database and role on the host Postgres, Prisma and the `migrate` service (moved here from P0 because nothing reads a database before P1). Google sign-in, access + refresh sessions (D1), session list/revoke, push-token registration, account-deletion skeleton. | `check:auth` passes: rotation, reuse detection, revoke-others |
+| **P1 Accounts** | Database and role on the host Postgres, Prisma and the `migrate` service (moved here from P0 because nothing reads a database before P1). Google sign-in, access + refresh sessions (D1), session list/revoke, push-token registration, account-deletion skeleton. | `check:auth` (pure) and `check:auth-db` (local database) pass: rotation, the lost-response retry window, reuse detection, idle expiry, revoke-others, re-auth for deletion. **Built and checked 2026-10-01.** |
 | **P2 Tree + sync** | Folders and files metadata, rename/move, trash/restore/purge, search, sync feed | `check:tree` (cycles, name conflicts, restore clashes) and `check:sync` pass |
 | **P3 Data plane** | Upload sessions (single + multipart, resume), complete + verify, thumbnails, downloads, outbox deletes, sweeper, reconciliation, `StorageEvent` choke point | A 5 GB upload survives network drops and an app kill. `check:storage` invariants hold. |
 | **P4 Metering + statements** | Daily close, PriceBook, month-to-date and projection, monthly statements, FCM + SES, cap alerts | The `check:metering` worked examples match. Re-running a close changes nothing. Alerts fire once per cycle. |

@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { parseDurationSeconds } from "../common/duration";
 
 // Load variables from .env into process.env as early as possible. `quiet` suppresses dotenv
 // v17's startup banner (and the harmless "injected env (0)" line in containers, where variables
@@ -44,6 +45,50 @@ const parsePort = (key: string, fallback: number): number => {
   return port;
 };
 
+// A required secret, long enough to be a real one. A short value is almost always a placeholder
+// that slipped into production.
+const requireSecret = (key: string, minLength: number): string => {
+  const value = requireEnv(key);
+  if (value.length < minLength) {
+    throw new Error(`Environment variable ${key} must be at least ${minLength} characters`);
+  }
+  return value;
+};
+
+// A comma-separated list; unset or blank → [].
+const parseList = (key: string): string[] =>
+  (process.env[key] ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+// How long an access token lives, in seconds. HOA protocol 04 defaults JWT_EXPIRES_IN to "never";
+// BrimBox deviates (D1 in docs/BACKEND_PLAN.md): access tokens always expire — the app refreshes
+// them silently with its refresh token — so "never" is refused rather than quietly honoured.
+const ACCESS_TOKEN_TTL_MIN_SECONDS = 60;
+const ACCESS_TOKEN_TTL_MAX_SECONDS = 24 * 60 * 60;
+const parseAccessTokenTtl = (key: string, fallback: string): number => {
+  const raw = (process.env[key] ?? "").trim() || fallback;
+  if (raw.toLowerCase() === "never") {
+    throw new Error(
+      `${key}=never is not supported in BrimBox: access tokens must expire (refresh tokens keep ` +
+        `users signed in). Use a duration such as "1h".`
+    );
+  }
+  const seconds = parseDurationSeconds(raw);
+  if (
+    seconds === null ||
+    seconds < ACCESS_TOKEN_TTL_MIN_SECONDS ||
+    seconds > ACCESS_TOKEN_TTL_MAX_SECONDS
+  ) {
+    throw new Error(
+      `Environment variable ${key} must be a duration between 1m and 24h, like "1h" or "900s" ` +
+        `(got "${raw}")`
+    );
+  }
+  return seconds;
+};
+
 // Parses an OPTIONAL env var holding a JSON object. Unset/blank -> null. Invalid JSON or a
 // non-object -> throw, so a mistyped value fails the boot (like requireEnv) instead of being
 // quietly ignored.
@@ -69,6 +114,19 @@ export const config = {
   // Public origin of this backend. The legal pages' absolute URLs in GET /config → links are
   // built from it (HOA protocol 12), so it is the one place the host name is written down.
   appPublicUrl: requireOrigin("APP_PUBLIC_URL"),
+  // PostgreSQL. Required at startup but not needed to answer GET /config or the legal pages:
+  // Prisma connects lazily, so those keep working while the database is unreachable.
+  databaseUrl: requireEnv("DATABASE_URL"),
+  // Signs access tokens (HS256). Rotating it invalidates outstanding ACCESS tokens only: apps
+  // refresh within the hour with their refresh tokens (stored as hashes in the database), so —
+  // unlike the house default — rotation does not sign everyone out.
+  jwtSecret: requireSecret("JWT_SECRET", 32),
+  accessTokenTtlSeconds: parseAccessTokenTtl("JWT_EXPIRES_IN", "1h"),
+  // Google OAuth client id(s) a sign-in idToken's `aud` may carry — the WEB client id the app
+  // passes as its server client id, comma-separated if there is more than one. Unset → sign-in
+  // answers 503 instead of failing the boot, so the rest of the API can run before the OAuth
+  // client exists.
+  googleClientIds: parseList("GOOGLE_CLIENT_ID"),
   // Optional JSON patch applied over the default remote config (GET /config) for every caller,
   // e.g. {"maintenance":{"enabled":true,"message":"Back in 10 minutes"}}. Lets ops flip a flag
   // with an .env change + container recreate — no code deploy. Every key must exist in

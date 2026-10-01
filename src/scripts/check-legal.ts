@@ -9,7 +9,11 @@
 
 // remoteConfig.defaults imports config/env.ts, which fails fast on missing REQUIRED vars. Set
 // placeholders BEFORE the imports below load it (tsc keeps statement order in CommonJS output).
-for (const [key, value] of Object.entries({ APP_PUBLIC_URL: "https://brimbox.ferbotz.com" })) {
+for (const [key, value] of Object.entries({
+  APP_PUBLIC_URL: "https://brimbox.ferbotz.com",
+  DATABASE_URL: "postgresql://check:check@localhost:5432/check",
+  JWT_SECRET: "check-placeholder-secret-at-least-32-characters",
+})) {
   process.env[key] ??= value;
 }
 
