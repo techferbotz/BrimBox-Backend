@@ -18,6 +18,11 @@ This page covers BrimBox's setup on the box and its project-specific steps.
 - **2026-10-01 — P0 live at `https://brimbox.ferbotz.com`** (commit `3cb36e1`): `/`, `/config` and the
   legal pages. Plain HTTP redirects to HTTPS. The Let's Encrypt certificate expires 2026-12-30 and renews
   automatically (`certbot.timer`; a renewal dry run passed).
+- **2026-10-01 — P1 deployed** (commit `06555bd`).
+  - **Database:** `brimbox` (owned by role `brimbox`) on the host PostgreSQL 18.6, with migration
+    `20261001094719_init_accounts` applied.
+  - **Endpoints:** `/api/v1/auth/*` and `/api/v1/me` are live.
+  - **Sign-in:** answers 503 until `GOOGLE_CLIENT_ID` is set (Google OAuth client, below).
 
 ## Who does what
 
@@ -31,9 +36,12 @@ access or touches an account. Claude prepares the exact steps for each.
 | Clone on the box, write `.env`, build and start, nginx site | Claude, over SSH | done 2026-10-01 |
 | DNS A record `brimbox` → `13.205.128.80`, DNS only (Cloudflare dashboard) | human | done 2026-10-01 |
 | certbot for `brimbox.ferbotz.com` | Claude, over SSH | done 2026-10-01 |
-| Details doc (protocol 00): `G:\My Drive\BrimBox\BrimBox details.md` | Claude | done 2026-10-01 (no secrets yet) |
+| Details doc (protocol 00): `G:\My Drive\BrimBox\BrimBox details.md` | Claude | done 2026-10-01 |
+| Postgres role + database, `pg_hba.conf` line, secrets in `.env`, migrate, app (P1) | Claude, over SSH | done 2026-10-01 |
+| DB password + `JWT_SECRET` in the details doc (copied box → doc, never displayed) | Claude | done 2026-10-01 |
+| Copy the details doc's "Secret values" into the HOA Credentials Registry | human | pending |
+| Google OAuth client: consent screen, Android + Web clients | human | pending |
 | R2 bucket + scoped API token (Cloudflare dashboard) — needed by P3 | human | pending |
-| Credentials in the details doc + HOA registry | whoever creates each secret | from P1 |
 
 ## The box
 
@@ -44,10 +52,11 @@ access or touches an account. Claude prepares the exact steps for each.
 - **Elastic IP:** `13.205.128.80` is an Elastic IP, so a stop/start keeps the address and no DNS changes.
 - **Boot:** every container uses `restart: unless-stopped`, and docker, postgresql and nginx are all
   enabled at boot.
-- **Disk is tight:** the 19 GB root is 86% full, about 2.7 GB free. Docker holds about 5.5 GB of images no
-  running container uses (possibly other apps' rollback images) plus about 1.3 GB of reclaimable build
-  cache. Check `df -h /` and `docker system df` before builds. Pruning affects every app on the box, so
-  ask first.
+- **Disk is critical:** the 19 GB root was 86% full before BrimBox, and **97% (747 MB free) after the
+  P1 build** (2026-10-01). Docker holds about 11.9 GB of images, of which about 6.75 GB is unused by any
+  container (some may be other apps' rollback images), plus 5.3 GB of build cache (1.27 GB
+  reclaimable). Check `df -h /` and `docker system df` before every build. Pruning affects every app on
+  the box, so ask first. Growing the EBS volume is the durable fix.
 
 ## First-time setup (P0, as run on 2026-10-01)
 
@@ -123,11 +132,16 @@ Play Console.
 To test a server block before its DNS exists, pin the name to the IP:
 `curl --resolve brimbox.ferbotz.com:80:13.205.128.80 http://brimbox.ferbotz.com/`.
 
-## P1 deploy: database and sign-in (runbook)
+## P1 deploy: database and sign-in (runbook, done 2026-10-01)
 
 Deploying doesn't need the Google OAuth client: until `GOOGLE_CLIENT_ID` is set, sign-in answers 503
 and everything else works. From P1 on, every deploy with a schema change follows protocol 05's order:
 migrate first, then rebuild the app.
+
+> **Gotcha (bit us on the first P1 deploy).** If you drive these steps from a script piped into
+> `ssh … 'bash -s'`, give every docker command `</dev/null` (or use `run -T`). Otherwise
+> `docker compose run` reads the REST OF THE SCRIPT as its stdin, and every step after it silently
+> never runs. That time, the migration had applied but the app was never rebuilt.
 
 ```bash
 cd /opt/apps/brimbox/BrimBox-Backend && git pull

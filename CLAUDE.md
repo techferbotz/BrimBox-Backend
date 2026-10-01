@@ -8,7 +8,8 @@ Multiplatform app, **Android first**, iOS later.
 **The design is in [`docs/BACKEND_PLAN.md`](docs/BACKEND_PLAN.md)** — architecture, data model, metering,
 billing, and the phased roadmap (§12). Read it before building a phase. **P0 (foundations) is live at
 `https://brimbox.ferbotz.com` since 2026-10-01. P1 (accounts: Google sign-in, device sessions, account
-deletion) is built and checked locally, not yet deployed.** Deploy facts: `docs/DEPLOY.md`.
+deletion) is deployed too; sign-in answers 503 until the Google OAuth client exists. Next: P2 (file
+tree).** Deploy facts: `docs/DEPLOY.md`.
 
 ## House of Apps protocols
 
@@ -131,6 +132,8 @@ repository/ dto/`. External SDKs each sit behind exactly one file (`storage/r2St
 
 - Migrations NEVER run on container start — the discrete `migrate` compose service runs them, before
   the app is rebuilt, always with `--build` (protocol 05).
+- Scripts sent over `ssh … 'bash -s' <<EOF`: give every docker command `</dev/null`. Otherwise
+  `docker compose run` swallows the rest of the script as stdin and the later steps silently never run.
 - Prisma is pinned to v6 (v7 drops `url = env("DATABASE_URL")` and needs a driver adapter).
 - R2 multipart: every part except the last must be the same size; R2 has no presigned POST. Always
   verify uploaded sizes with `HeadObject` — never bill a client-declared size.
