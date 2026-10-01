@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "brimbox-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 8080
+    },
+    {
+      "name": "brimbox-dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dist/app.js"],
+      "port": 8080
+    }
+  ]
+}

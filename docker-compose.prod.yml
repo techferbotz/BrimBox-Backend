@@ -1,0 +1,33 @@
+# Production stack for the SHARED EC2 box (HOA protocols 03 + 05), next to the other House of Apps
+# projects. PostgreSQL runs as a host service on the box, not in this stack.
+#
+# Isolation:
+#   - `name: brimbox` -> containers/networks are `brimbox_*`; nothing collides with other apps.
+#   - The app publishes ONLY on 127.0.0.1 -> reachable by host nginx, never from the internet.
+#
+# Usage (full runbook: docs/DEPLOY.md):
+#   docker compose -f docker-compose.prod.yml up -d --build app
+# From P1 (first Prisma migration), a `migrate` service runs BEFORE the app is rebuilt:
+#   docker compose -f docker-compose.prod.yml run --rm --build migrate
+name: brimbox
+
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file: .env
+    # Loopback only, so only host nginx can reach it. The host port comes from APP_HOST_PORT in
+    # .env (8080 and 8090–8093 belong to other apps); 8080 on the right is the in-container port.
+    ports:
+      - "127.0.0.1:${APP_HOST_PORT:-8094}:8080"
+    # From P1: reach the host's PostgreSQL. DATABASE_URL in .env points at host.docker.internal:5432.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # The box is small and shared: cap this container's log files so they can't fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

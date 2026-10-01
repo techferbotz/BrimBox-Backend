@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  // ts-node only compiles files as they're imported, so it misses ambient augmentations that
+  // nothing imports (src/types/express.d.ts adds req.userId / req.deviceId). `files: true` makes
+  // it load the `include` list like tsc does, so the check:* scripts see those types.
+  "ts-node": {
+    "files": true
+  }
+}

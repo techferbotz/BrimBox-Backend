@@ -1,0 +1,13 @@
+node_modules
+dist
+
+# Environment files hold real secrets on the server — never commit them. Only the example is tracked.
+.env
+.env.*
+!.env.example
+
+# Detached-deploy bookkeeping (HOA protocol 05)
+deploy.out
+deploy.pid
+
+*.log
