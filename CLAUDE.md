@@ -138,6 +138,8 @@ repository/ dto/`. External SDKs each sit behind exactly one file (`storage/r2St
 - R2 multipart: every part except the last must be the same size; R2 has no presigned POST. Always
   verify uploaded sizes with `HeadObject` — never bill a client-declared size.
 - The request logger prints URLs: redact share tokens (`/s/:token`) before P7 ships.
-- The shared box (t3.small since 2026-10-01) runs five apps plus Postgres, and its disk is about 86%
-  full. Check `df -h /` before an image build, and never prune Docker without asking: the unused
-  images may be other apps' rollback copies (`docs/DEPLOY.md` § The box).
+- The shared box (t3.small, 40 GiB disk since 2026-10-09) runs five apps plus Postgres. Every app's
+  on-box builds grow Docker's cache, so check `df -h /` before an image build. Never prune Docker
+  without asking: the unused images may be other apps' rollback copies (`docs/DEPLOY.md` § The box).
+- SSH timing out usually means the dev machine's public IP changed: port 22 only allows listed IPs. The
+  fix (a security-group edit) is human-run; `docs/DEPLOY.md` § The box has the check.

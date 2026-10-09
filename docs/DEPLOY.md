@@ -6,7 +6,7 @@ This page covers BrimBox's setup on the box and its project-specific steps.
 | | |
 |---|---|
 | Domain | `brimbox.ferbotz.com` (DNS on Cloudflare, **DNS only** / grey cloud, like the other apps) |
-| Box | shared EC2 `i-0ee7ba0922056100d`, **t3.small**, `ap-south-1a`, Elastic IP `13.205.128.80` |
+| Box | shared EC2 `i-0ee7ba0922056100d`, **t3.small**, `ap-south-1a`, Elastic IP `13.205.128.80`, 40 GiB gp3 root disk (`vol-0b4bee81a79dd91be`) |
 | Checkout | `/opt/apps/brimbox/BrimBox-Backend` |
 | Compose project | `brimbox` (`docker-compose.prod.yml`), container `brimbox-app-1` |
 | Loopback port | `127.0.0.1:8094` → container `8080` |
@@ -41,6 +41,8 @@ access or touches an account. Claude prepares the exact steps for each.
 | DB password + `JWT_SECRET` in the details doc (copied box → doc, never displayed) | Claude | done 2026-10-01 |
 | Copy the details doc's "Secret values" into the HOA Credentials Registry | human | pending |
 | Google OAuth client: consent screen, Android + Web clients | human | pending |
+| Grow the root EBS volume 20 → 40 GiB (`modify-volume`; irreversible) | human | done 2026-10-09 |
+| Grow partition + ext4 filesystem into it (`growpart`, `resize2fs`; online) | Claude, over SSH | done 2026-10-09 |
 | R2 bucket + scoped API token (Cloudflare dashboard) — needed by P3 | human | pending |
 
 ## The box
@@ -52,11 +54,23 @@ access or touches an account. Claude prepares the exact steps for each.
 - **Elastic IP:** `13.205.128.80` is an Elastic IP, so a stop/start keeps the address and no DNS changes.
 - **Boot:** every container uses `restart: unless-stopped`, and docker, postgresql and nginx are all
   enabled at boot.
-- **Disk is critical:** the 19 GB root was 86% full before BrimBox, and **97% (747 MB free) after the
-  P1 build** (2026-10-01). Docker holds about 11.9 GB of images, of which about 6.75 GB is unused by any
-  container (some may be other apps' rollback images), plus 5.3 GB of build cache (1.27 GB
-  reclaimable). Check `df -h /` and `docker system df` before every build. Pruning affects every app on
-  the box, so ask first. Growing the EBS volume is the durable fix.
+- **Disk:** the root EBS volume is **40 GiB** since 2026-10-09.
+  - **Why it was grown:** the old 19 GB filesystem went from 86% full before BrimBox, to 97% after the P1
+    build, to **99% (246 MB free)** eight days later.
+  - **After the resize:** a 38 GB filesystem, 48% used, 20 GB free.
+  - **Where space goes:** every app builds its image on the box, so Docker's build cache and old images
+    grow with each deploy (cache went 5.3 → 6.2 GB in those eight days). On 2026-10-09 Docker held
+    12.9 GB of images, 7.2 GB of them unused by any container, plus 6.2 GB of build cache (2.2 GB
+    reclaimable). Container logs are small. Only BrimBox caps its own logs.
+  - **Before every build,** check `df -h /` and `docker system df`.
+  - **Pruning** affects every app on the box, so ask first. A periodic
+    `docker builder prune --filter until=720h` (cache unused for 30 days) would keep it in check.
+  - **Growing it again:** `modify-volume` is human-run and irreversible (EBS volumes can't shrink); then
+    `sudo growpart /dev/nvme0n1 1 && sudo resize2fs /dev/nvme0n1p1` online. The root partition is the
+    last one on the disk, so it can always grow.
+- **SSH allow-list:** port 22 is open only to the developer machines' public IPs, which are dynamic.
+  If SSH times out, compare `curl -s https://checkip.amazonaws.com` with the security group's port-22
+  rules (`sg-0b94e51f24b87d4af`). Updating the list is human-run (protocol 02).
 
 ## First-time setup (P0, as run on 2026-10-01)
 
