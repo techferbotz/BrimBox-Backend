@@ -8,8 +8,8 @@ Multiplatform app, **Android first**, iOS later.
 **The design is in [`docs/BACKEND_PLAN.md`](docs/BACKEND_PLAN.md)** — architecture, data model, metering,
 billing, and the phased roadmap (§12). Read it before building a phase. **P0 (foundations) is live at
 `https://brimbox.ferbotz.com` since 2026-10-01. P1 (accounts: Google sign-in, device sessions, account
-deletion) is deployed too; sign-in answers 503 until the Google OAuth client exists. P2 (file tree,
-trash, search, sync feed, worker) is built and checked locally, not yet deployed.** Deploy facts:
+deletion) and P2 (file tree, trash, search, sync feed, worker) are deployed too; sign-in answers 503
+until the Google OAuth client exists. Next: P3 (uploads and downloads to R2).** Deploy facts:
 `docs/DEPLOY.md`.
 
 ## House of Apps protocols

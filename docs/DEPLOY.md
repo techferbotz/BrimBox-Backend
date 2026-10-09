@@ -23,6 +23,12 @@ This page covers BrimBox's setup on the box and its project-specific steps.
     `20261001094719_init_accounts` applied.
   - **Endpoints:** `/api/v1/auth/*` and `/api/v1/me` are live.
   - **Sign-in:** answers 503 until `GOOGLE_CLIENT_ID` is set (Google OAuth client, below).
+- **2026-10-09 — P2 deployed** (commit `884e2f3`).
+  - **Migration:** `20261009153216_tree_sync_jobs`.
+  - **Endpoints:** `/api/v1/folders|nodes|trash|search|sync` are live behind sign-in.
+  - **Worker:** the new `brimbox-worker-1` container ran its three daily jobs for that day on start
+    (all SUCCEEDED).
+  - **Disk:** 20 → 19 GB free.
 
 ## Who does what
 
@@ -41,6 +47,7 @@ access or touches an account. Claude prepares the exact steps for each.
 | DB password + `JWT_SECRET` in the details doc (copied box → doc, never displayed) | Claude | done 2026-10-01 |
 | Copy the details doc's "Secret values" into the HOA Credentials Registry | human | pending |
 | Google OAuth client: consent screen, Android + Web clients | human | pending |
+| P2: migrate, build + start app and worker | Claude, over SSH | done 2026-10-09 |
 | Grow the root EBS volume 20 → 40 GiB (`modify-volume`; irreversible) | human | done 2026-10-09 |
 | Grow partition + ext4 filesystem into it (`growpart`, `resize2fs`; online) | Claude, over SSH | done 2026-10-09 |
 | R2 bucket + scoped API token (Cloudflare dashboard) — needed by P3 | human | pending |
@@ -191,7 +198,7 @@ curl -s https://brimbox.ferbotz.com/config              # still 200
 Record the two new secrets, the database password and `JWT_SECRET`, in `BrimBox details.md` and the HOA
 credentials registry. Copy them from the server `.env`; never paste them into chat.
 
-## P2 deploy: file tree, sync feed, worker (runbook)
+## P2 deploy: file tree, sync feed, worker (runbook, done 2026-10-09)
 
 A schema change (`Node`, `JobRun`, and `User.syncSeq`/`syncFloor`), so migrate first. P2 also adds the
 **worker** service, which needs nothing new in `.env`.
