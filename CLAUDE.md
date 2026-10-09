@@ -8,8 +8,9 @@ Multiplatform app, **Android first**, iOS later.
 **The design is in [`docs/BACKEND_PLAN.md`](docs/BACKEND_PLAN.md)** — architecture, data model, metering,
 billing, and the phased roadmap (§12). Read it before building a phase. **P0 (foundations) is live at
 `https://brimbox.ferbotz.com` since 2026-10-01. P1 (accounts: Google sign-in, device sessions, account
-deletion) is deployed too; sign-in answers 503 until the Google OAuth client exists. Next: P2 (file
-tree).** Deploy facts: `docs/DEPLOY.md`.
+deletion) is deployed too; sign-in answers 503 until the Google OAuth client exists. P2 (file tree,
+trash, search, sync feed, worker) is built and checked locally, not yet deployed.** Deploy facts:
+`docs/DEPLOY.md`.
 
 ## House of Apps protocols
 
@@ -44,10 +45,13 @@ Full reasons in `docs/BACKEND_PLAN.md` §2.
   multipart for large files, originals stored byte-exact. No multer, no sharp in the request path, no
   public-read objects.
 - **D3 — The app makes thumbnails** and uploads them with the file; the shared box has no CPU/RAM to spare.
-- **D4 — Sync cursor is a server-assigned per-user sequence**, not the client's `updatedAt` (client UUIDs,
-  tombstones and last-write-wins stay as in protocol 04).
-- **D5 — A long-running `worker` service** with advisory locks and a `JobRun` table runs scheduled jobs,
-  instead of host-crontab scripts. (Lands with the first job.)
+- **D4 — No client clocks in sync.** The cursor is a server-assigned per-user sequence, and changes
+  apply in arrival order, with an optional `ifSeq` precondition (409 `NODE_CHANGED`) instead of
+  protocol 04's last-write-wins on the client's `updatedAt`. Client UUIDs (idempotent by id) and
+  tombstones stay as in protocol 04.
+- **D5 — A long-running `worker` service** (same image, `node dist/worker.js`) runs daily jobs under an
+  advisory lock with a `JobRun` row per job and IST day, instead of host-crontab scripts. Since P2:
+  trash auto-purge, tombstone compaction, expired-session cleanup.
 - **D6 — Razorpay recurring payments** (the mandate) plus RevenueCat (Play credits).
 - **D7 — FCM + Amazon SES** for billing alerts, each behind one file.
 - **Smaller ones:** the failure envelope always carries `code` (allowed by `code?`).
@@ -56,10 +60,12 @@ Full reasons in `docs/BACKEND_PLAN.md` §2.
 
 ```bash
 npm run dev               # ts-node-dev on http://localhost:8080
+npm run dev:worker        # the scheduled-jobs worker, locally
 npm run typecheck         # tsc --noEmit — run after every change
 npm run build             # tsc -> dist/  (run npm run prisma:generate after schema changes)
-npm run check:all         # pure fixture scripts: check:config, check:legal, check:auth
+npm run check:all         # pure fixture scripts: check:config, check:legal, check:auth, check:tree
 npm run check:auth-db     # sign-in/session flows against a LOCAL database (refuses any other host)
+npm run check:tree-db     # tree, trash, sync, compaction, jobs against a LOCAL database
 npm run prisma:migrate    # create/apply a migration locally (prisma migrate dev)
 ```
 
@@ -79,9 +85,10 @@ Local env: copy `.env.example` to `.env`. Variables are read **only** in `src/co
 ## Directory map
 
 ```
-prisma/schema.prisma            User, Session (+ migrations/)
+prisma/schema.prisma            User, Session, Node, JobRun (+ migrations/)
 src/
   app.ts                        express app: middleware, root routes, 404, error handler, listen
+  worker.ts                     the worker process: scheduled jobs (D5)
   config/env.ts                 the only reader of process.env (fail fast)
   prisma/client.ts              the Prisma singleton (imported only by repositories)
   common/                       deepMerge, duration, validation, errors/, response/,
@@ -92,6 +99,10 @@ src/
     auth/                       /api/v1/auth: sign-in, refresh (rotation), logout; Session repository;
                                 auth.rules.ts (pure decisions) + auth.policy.ts (numbers)
     account/                    /api/v1/me: profile, devices, push token, deletion; User repository
+    nodes/                      /api/v1/folders|nodes|trash|search: the tree; TreeTx (locked writes);
+                                nodes.rules.ts (names, cursors) + nodes.policy.ts (numbers)
+    sync/                       /api/v1/sync/changes: the change feed; tombstone compaction
+    jobs/                       scheduler, JobRun repository, jobs.ts (the job list), jobs.schedule.ts
     remoteConfig/               GET /config (protocol 10)
     legal/                      /privacy /terms /delete-account (protocol 12) + public-promise constants
   scripts/check-*.ts            fixture checks (check-auth-db needs a local database)
@@ -118,6 +129,10 @@ repository/ dto/`. External SDKs each sit behind exactly one file (`storage/r2St
   clock as constructor deps — that is how `check:auth-db` fakes Google without a test switch in
   production code. Re-auth failures on destructive actions are 403s (a 401 would trigger the app's
   refresh flow).
+- **Tree writes** go through `treeRepository.inUserTransaction`. It takes the user's row lock and the
+  next `syncSeq` first, which serialises a user's tree changes and makes sibling-name uniqueness
+  race-free. Every node a transaction touches gets that one seq, and the feed orders by (syncSeq, id).
+  Invariant: an active node's ancestors are all active.
 - **Money** (from P4): integer paise in `BigInt`, decimal strings on the wire, `decimal.js` half-up, all
   arithmetic in one `money.ts`. Metering keeps exact charges in micro-paise; statements round once.
 - **Every change to stored bytes goes through `metering.recordStorageChange()`** in the same transaction
@@ -135,6 +150,8 @@ repository/ dto/`. External SDKs each sit behind exactly one file (`storage/r2St
 - Scripts sent over `ssh … 'bash -s' <<EOF`: give every docker command `</dev/null`. Otherwise
   `docker compose run` swallows the rest of the script as stdin and the later steps silently never run.
 - Prisma is pinned to v6 (v7 drops `url = env("DATABASE_URL")` and needs a driver adapter).
+- Prisma's `contains` / `startsWith` do NOT escape LIKE wildcards: wrap user text in `escapeLike()`.
+- Deploys from P2 on rebuild both services: `up -d --build app worker` (after the migrate step).
 - R2 multipart: every part except the last must be the same size; R2 has no presigned POST. Always
   verify uploaded sizes with `HeadObject` — never bill a client-declared size.
 - The request logger prints URLs: redact share tokens (`/s/:token`) before P7 ships.

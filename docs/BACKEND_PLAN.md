@@ -93,7 +93,7 @@ Four rules shape everything else:
 | D1 | Access JWT never expires; no refresh tokens | 1-hour access JWT, plus a rotating refresh token for each device (Billanta's `auth.service.ts` pattern). Supports "sign out other devices" and bans. | Protocol 04 itself says to reinstate expiry for payment and sensitive surfaces. BrimBox holds private files and a mandate on the user's bank account. The KMM client's Ktor `Auth` plugin refreshes silently, so users never see a timed logout. |
 | D2 | S3 `<app>-media`, public-read; multer + sharp inside the request; 8 MB cap | R2 private bucket. Presigned direct upload and download, multipart for large files. Originals are stored byte-for-byte. | Files are the product: up to GBs, private, and never re-encoded. Proxying them would saturate the shared box. S3's download fees would dominate a pay-as-you-use price. |
 | D3 | The server makes thumbnails with sharp | The app makes a ≤512 px WebP thumbnail and uploads it alongside the file | Keeps CPU and RAM off the shared box. The phone already decodes HEIF and video. |
-| D4 | The sync cursor is the client's `updatedAt` | Client UUIDs, tombstones and last-write-wins on client `updatedAt` stay as in protocol 04. The *cursor* is a sequence number the server assigns per user. | Many changes start on the server: upload completion, trash auto-purge, takedowns. Device clocks also drift. A server sequence never skips a change. |
+| D4 | The sync cursor and last-write-wins key is the client's `updatedAt` | No client clocks anywhere. The *cursor* is a sequence number the server assigns per user, and changes apply in arrival order. An optional `ifSeq` precondition (409 `NODE_CHANGED`) protects replayed offline edits. Client UUIDs (idempotent by id) and tombstones stay as in protocol 04. | Many changes start on the server: upload completion, trash auto-purge, takedowns. Device clocks drift, so comparing them with server times would silently drop real edits. A server sequence never skips a change. |
 | D5 | Scheduled scripts run from the host crontab | A long-running `worker` service with a small scheduler, Postgres advisory locks and a `JobRun` table | There are about 10 recurring jobs, some every minute. Billing jobs must run exactly once and be observable. One container is lighter than cron starting a container per run. |
 | D6 | RevenueCat is the only payment provider | Razorpay recurring (the mandate) plus RevenueCat (Play credit packs) | The chosen billing model needs mandates, and Play policy needs Play billing offered alongside it (§7.6). |
 | D7 | No push or email infrastructure | FCM (`firebase-admin`) and Amazon SES (`@aws-sdk/client-sesv2`), each behind one file | Billing alerts must reach users who don't open the app: cap reached, bill due, suspension and deletion warnings. |
@@ -370,11 +370,16 @@ purged in the same transaction (−bytes), and its object is deleted through the
 ### 5.4 Sync feed (for the app's Room cache)
 
 `GET /api/v1/sync/changes?cursor=&limit=500` returns `{ changes, nextCursor, hasMore }`.
-- Each change is a full node snapshot, including tombstones.
-- The cursor is the per-user `syncSeq`. It is assigned under the user's row lock, so commit order matches
-  sequence order.
-- Tombstones are kept for 90 days. An older cursor gets `410 RESYNC_REQUIRED`, and the app does a full
-  listing.
+- **Changes:** each one is a full node snapshot, including tombstones (purged nodes, names cleared).
+- **Ordering:** every tree transaction takes the user's row lock and increments `User.syncSeq` first,
+  then stamps every node it touches with that one value. Feed order (syncSeq, id) is therefore commit
+  order.
+- **The cursor** is (syncSeq, id, floor-when-issued). At the end of a pass it jumps to the account's
+  committed sequence (any later commit gets a higher one), so it never stalls below the floor.
+- **Compaction:** tombstones are kept 90 days, then compacted, which raises `User.syncFloor`. A device
+  gets `410 RESYNC_REQUIRED` only when compaction happened *after* its cursor was issued AND the cursor
+  hasn't passed the floor. A full sync walking old rows below the floor is never interrupted.
+  (`check:tree-db` caught the first version breaking exactly that.)
 
 ### 5.5 Share links (v1)
 
@@ -681,7 +686,7 @@ or failed run is visible and alertable. The nightly DB backup runs from the host
 |---|---|---|
 | **P0 Foundations** | Protocol 00 setup: Drive folder, contract folder, docs mirror; the details doc and credentials registry entries are written at first deploy, when there are secrets to record. Scaffold per protocol 04, `/config`, legal pages, health, Docker/compose, `CLAUDE.md`. DNS, vhost, TLS. The R2 bucket is created by you, ready for P3. | `https://brimbox.ferbotz.com` serves health, `/config` and the legal pages. Contract folder bootstrapped. |
 | **P1 Accounts** | Database and role on the host Postgres, Prisma and the `migrate` service (moved here from P0 because nothing reads a database before P1). Google sign-in, access + refresh sessions (D1), session list/revoke, push-token registration, account-deletion skeleton. | `check:auth` (pure) and `check:auth-db` (local database) pass: rotation, the lost-response retry window, reuse detection, idle expiry, revoke-others, re-auth for deletion. **Built, checked and deployed 2026-10-01** (sign-in waits on the Google OAuth client). |
-| **P2 Tree + sync** | Folders and files metadata, rename/move, trash/restore/purge, search, sync feed | `check:tree` (cycles, name conflicts, restore clashes) and `check:sync` pass |
+| **P2 Tree + sync** | Folders and files metadata, rename/move, trash/restore/purge, search, sync feed, plus the worker (D5) with trash auto-purge, tombstone compaction and expired-session cleanup | `check:tree` (pure) and `check:tree-db` (local database) pass: cycles, name conflicts, restore clashes, `ifSeq`, feed ordering and ties, compaction → resync, auto-purge, concurrency, job claims. **Built and checked 2026-10-09.** |
 | **P3 Data plane** | Upload sessions (single + multipart, resume), complete + verify, thumbnails, downloads, outbox deletes, sweeper, reconciliation, `StorageEvent` choke point | A 5 GB upload survives network drops and an app kill. `check:storage` invariants hold. |
 | **P4 Metering + statements** | Daily close, PriceBook, month-to-date and projection, monthly statements, FCM + SES, cap alerts | The `check:metering` worked examples match. Re-running a close changes nothing. Alerts fire once per cycle. |
 | **P5 Mandate billing** | Razorpay customer + mandate, webhooks, settlement (≤ cap, excess link, retry), standing state machine, cap change, cancellation, deletion → cancel mandate | Full cycle in Razorpay test mode, including replayed webhooks and a crash between "Payment row written" and "Razorpay called". `check:settlement` passes. |

@@ -1,16 +1,11 @@
 import { Request, Response } from "express";
-import { NotFoundError, UnauthorizedError } from "../../../common/errors/AppError";
+import { NotFoundError } from "../../../common/errors/AppError";
+import { principalOf as principal } from "../../../common/middleware/auth.middleware";
 import { sendSuccess } from "../../../common/response/apiResponse";
 import { isUuid, requireObjectBody, requireString } from "../../../common/validation";
 import { accountService } from "../service/account.service";
 
 // Thin controllers for /api/v1/me. Every route sits behind requireAuth.
-
-// The signed-in caller, as requireAuth attached it.
-const principal = (req: Request): { userId: string; sessionId: string } => {
-  if (!req.userId || !req.sessionId) throw new UnauthorizedError("Sign-in required", "UNAUTHORIZED");
-  return { userId: req.userId, sessionId: req.sessionId };
-};
 
 // GET /api/v1/me
 export const getMe = async (req: Request, res: Response): Promise<void> => {

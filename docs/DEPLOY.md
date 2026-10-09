@@ -191,6 +191,28 @@ curl -s https://brimbox.ferbotz.com/config              # still 200
 Record the two new secrets, the database password and `JWT_SECRET`, in `BrimBox details.md` and the HOA
 credentials registry. Copy them from the server `.env`; never paste them into chat.
 
+## P2 deploy: file tree, sync feed, worker (runbook)
+
+A schema change (`Node`, `JobRun`, and `User.syncSeq`/`syncFloor`), so migrate first. P2 also adds the
+**worker** service, which needs nothing new in `.env`.
+
+```bash
+cd /opt/apps/brimbox/BrimBox-Backend && git pull
+df -h / && docker system df                               # room for two image builds?
+docker compose -f docker-compose.prod.yml run --rm --build migrate </dev/null
+docker compose -f docker-compose.prod.yml up -d --build app worker </dev/null
+
+# verify
+curl -s https://brimbox.ferbotz.com/api/v1/folders/root/children    # 401 UNAUTHORIZED (route exists)
+curl -s https://brimbox.ferbotz.com/api/v1/sync/changes             # 401 UNAUTHORIZED
+docker compose -f docker-compose.prod.yml logs --tail=20 worker     # "BrimBox worker started" + today's job runs
+sudo -u postgres psql -d brimbox -c 'select name, "periodKey", status, summary from "JobRun" order by name'
+```
+
+The worker runs each daily job once per IST day, at or after its time (03:00 / 03:30 / 04:00). Started
+later in the day, it runs that day's jobs straight away. A failed run is retried after 15 minutes; the
+`JobRun` table shows each run's status and summary.
+
 ### Google OAuth client (human, for sign-in)
 
 Use a Google Cloud project of BrimBox's own, so the sign-in consent screen says "BrimBox":

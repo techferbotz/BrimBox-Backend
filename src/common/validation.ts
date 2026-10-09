@@ -57,3 +57,35 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // the same answer as an id that doesn't exist (or belongs to someone else).
 export const isUuid = (value: unknown): value is string =>
   typeof value === "string" && UUID_PATTERN.test(value);
+
+// A UUID the client must send in the body (e.g. the id it generated for a new folder). Lower-cased,
+// so the same id never looks like two.
+export const requireUuid = (value: unknown, field: string): string => {
+  if (!isUuid(value)) throw new BadRequestError(`"${field}" must be a UUID`);
+  return value.toLowerCase();
+};
+
+/** An optional parent reference: absent → undefined (unchanged), null → the root, or a UUID. */
+export const optionalParentId = (value: unknown, field = "parentId"): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return requireUuid(value, field);
+};
+
+/** An optional whole number ≥ 0 (e.g. `ifSeq`). */
+export const optionalNonNegativeInt = (value: unknown, field: string): number | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new BadRequestError(`"${field}" must be a whole number ≥ 0`);
+  }
+  return value;
+};
+
+/** An optional value from a fixed set; absent → the fallback. */
+export const optionalEnum = <T extends string>(value: unknown, field: string, allowed: readonly T[], fallback: T): T => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new BadRequestError(`"${field}" must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T;
+};

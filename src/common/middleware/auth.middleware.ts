@@ -28,6 +28,12 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   next();
 };
 
+/** The signed-in caller, as requireAuth attached it. For controllers behind requireAuth. */
+export const principalOf = (req: Request): { userId: string; sessionId: string } => {
+  if (!req.userId || !req.sessionId) throw new UnauthorizedError("Sign-in required", "UNAUTHORIZED");
+  return { userId: req.userId, sessionId: req.sessionId };
+};
+
 /**
  * Optional identity for GET /config only: attaches req.userId from a valid token so targeting rules
  * can use it. Never rejects and never touches the database — the config must answer for any caller

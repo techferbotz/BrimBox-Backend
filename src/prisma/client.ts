@@ -12,3 +12,6 @@ export const prisma = global.prismaClient ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
   global.prismaClient = prisma;
 }
+
+/** Close the pool on shutdown (the worker and scripts) — infrastructure, not a query. */
+export const disconnectDatabase = (): Promise<void> => prisma.$disconnect();

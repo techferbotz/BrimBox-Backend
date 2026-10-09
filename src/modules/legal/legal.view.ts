@@ -11,6 +11,8 @@
  * fill every TODO before publishing.
  */
 
+import { TRASH_RETENTION_DAYS } from "../nodes/nodes.policy";
+
 // ── Shared across all documents (edit in one place) ──
 export const LEGAL_APP_NAME = "BrimBox";
 // TODO(legal): confirm the exact legal entity that operates BrimBox.
@@ -40,11 +42,11 @@ export const TERMS_GOVERNING_LAW = "[your jurisdiction]";
 // anyone under 18 as a child whose data needs verifiable parental consent.
 export const MINIMUM_AGE = 18;
 
-// ── Public promises. Each is enforced by a module that doesn't exist yet; when that module lands
-// (trash → P2, file purge → P3, billing → P4/P5), MOVE the constant there and import it here, so
-// the page and the behaviour can't drift. Change the reality and the constant together. ──
-/** Files in Trash are permanently deleted after this many days (trash auto-purge, P2). */
-export const TRASH_RETENTION_DAYS = 30;
+// ── Public promises. Each lives with the module that enforces it and is imported here, so the page
+// and the behaviour can't drift; the ones below are still waiting for their module (file purge → P3,
+// billing → P4/P5) — MOVE each there when it lands. Change the reality and the constant together. ──
+/** Trash is permanently deleted after this many days — enforced by the trash.autoPurge job. */
+export { TRASH_RETENTION_DAYS };
 /** Deadline for actioning an emailed deletion request. In-app deletion closes the account at once. */
 export const DELETION_REQUEST_SLA_DAYS = 30;
 /** After an account is deleted, its files are removed from object storage within this many days. */

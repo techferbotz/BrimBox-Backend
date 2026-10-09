@@ -52,6 +52,13 @@ export class ConflictError extends AppError {
   }
 }
 
+// 410 — what was asked for is gone for good (e.g. a sync cursor older than the retained history).
+export class GoneError extends AppError {
+  constructor(message = "Gone", code = "GONE") {
+    super(410, message, code);
+  }
+}
+
 // 429 — the caller is over a rate limit. The error handler turns `retryAfterSeconds` into a
 // Retry-After header.
 export class TooManyRequestsError extends AppError {

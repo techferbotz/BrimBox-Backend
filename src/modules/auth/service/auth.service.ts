@@ -153,6 +153,11 @@ export class AuthService {
     return { userId: claims.userId, sessionId: claims.sessionId };
   }
 
+  /** Job: delete sessions past their idle expiry. Returns a one-line summary. */
+  async purgeExpiredSessions(now: Date): Promise<string> {
+    return `removed ${await sessionRepository.deleteExpired(now)} expired session(s)`;
+  }
+
   /**
    * Who is asking, from the token's signature and expiry alone — for GET /config, which must never
    * touch the database (HOA protocol 10 §2 rule 4). Good enough for targeting rules; never for

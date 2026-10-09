@@ -9,6 +9,8 @@ import legalRoutes from "./modules/legal/legal.routes";
 import remoteConfigRoutes from "./modules/remoteConfig/remoteConfig.routes";
 import authRoutes from "./modules/auth/auth.routes";
 import accountRoutes from "./modules/account/account.routes";
+import { foldersRouter, nodesRouter, searchRouter, trashRouter } from "./modules/nodes/nodes.routes";
+import syncRoutes from "./modules/sync/sync.routes";
 
 const app = express();
 app.disable("x-powered-by");
@@ -40,6 +42,11 @@ app.use("/config", remoteConfigRoutes);
 // App API. Sign-in/refresh/logout are how a token is obtained; everything else requires one.
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/me", accountRoutes);
+app.use("/api/v1/folders", foldersRouter);
+app.use("/api/v1/nodes", nodesRouter);
+app.use("/api/v1/trash", trashRouter);
+app.use("/api/v1/search", searchRouter);
+app.use("/api/v1/sync", syncRoutes);
 
 // Unknown route -> standard 404 envelope, produced by the central error handler.
 app.use((req) => {

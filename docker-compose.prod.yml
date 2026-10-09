@@ -7,7 +7,7 @@
 #
 # Usage (full runbook: docs/DEPLOY.md). With a schema change, migrate FIRST, always with --build:
 #   docker compose -f docker-compose.prod.yml run --rm --build migrate
-#   docker compose -f docker-compose.prod.yml up -d --build app
+#   docker compose -f docker-compose.prod.yml up -d --build app worker
 name: brimbox
 
 services:
@@ -25,6 +25,23 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # The box is small and shared: cap this container's log files so they can't fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Scheduled jobs (deviation D5): trash auto-purge, tombstone compaction, expired-session cleanup.
+  # Same image as the app, its own process; the API never runs jobs. No published port.
+  worker:
+    build:
+      context: .
+      target: runner
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     logging:
       driver: json-file
       options:

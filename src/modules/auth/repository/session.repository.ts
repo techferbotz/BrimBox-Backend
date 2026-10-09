@@ -119,6 +119,12 @@ export class SessionRepository {
     });
   }
 
+  /** Job: sessions that idled out are dead weight (refresh would reject them anyway). */
+  async deleteExpired(now: Date): Promise<number> {
+    const { count } = await prisma.session.deleteMany({ where: { expiresAt: { lte: now } } });
+    return count;
+  }
+
   async touch(sessionId: string, now: Date): Promise<void> {
     await prisma.session.updateMany({ where: { id: sessionId }, data: { lastUsedAt: now } });
   }

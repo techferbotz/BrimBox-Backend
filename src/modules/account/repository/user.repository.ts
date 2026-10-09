@@ -43,13 +43,15 @@ export class UserRepository {
   }
 
   /**
-   * Account deletion, in ONE transaction: sign out every device and anonymise the user. The row
-   * itself stays as an anonymous anchor for records the law makes us keep (statements and payments,
-   * from P5); everything that identifies the person is cleared.
+   * Account deletion, in ONE transaction: sign out every device, delete the whole tree (folder and
+   * file names are personal data; no device needs tombstones once the account is gone), and
+   * anonymise the user. The row itself stays as an anonymous anchor for records the law makes us
+   * keep (statements and payments, from P5); everything that identifies the person is cleared.
    */
   async anonymiseAndSignOut(userId: string, now: Date): Promise<void> {
     await prisma.$transaction([
       prisma.session.deleteMany({ where: { userId } }),
+      prisma.node.deleteMany({ where: { userId } }),
       prisma.user.update({
         where: { id: userId },
         data: { googleSub: null, email: null, name: null, photoUrl: null, deletedAt: now },

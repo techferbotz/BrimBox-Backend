@@ -10,8 +10,10 @@
   },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --exit-child src/app.ts",
+    "dev:worker": "ts-node-dev --respawn --transpile-only --exit-child src/worker.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -21,7 +23,9 @@
     "check:legal": "ts-node src/scripts/check-legal.ts",
     "check:auth": "ts-node src/scripts/check-auth.ts",
     "check:auth-db": "ts-node src/scripts/check-auth-db.ts",
-    "check:all": "npm run check:config && npm run check:legal && npm run check:auth"
+    "check:tree": "ts-node src/scripts/check-tree.ts",
+    "check:tree-db": "ts-node src/scripts/check-tree-db.ts",
+    "check:all": "npm run check:config && npm run check:legal && npm run check:auth && npm run check:tree"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
